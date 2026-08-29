@@ -73,6 +73,7 @@ function App() {
 
   // Subscriber Form states
   const [phoneNumber, setPhoneNumber] = useState('')
+  const [email, setEmail] = useState('')
   const [subLanguage, setSubLanguage] = useState('en')
   const [subRegion, setSubRegion] = useState('')
   const [subSuccess, setSubSuccess] = useState(false)
@@ -81,6 +82,7 @@ function App() {
 
   // Onboarding Form states
   const [onboardingPhone, setOnboardingPhone] = useState('')
+  const [onboardingEmail, setOnboardingEmail] = useState('')
   const [onboardingName, setOnboardingName] = useState('')
   const [onboardingLang, setOnboardingLang] = useState('en')
   const [onboardingCountry, setOnboardingCountry] = useState('India')
@@ -211,8 +213,8 @@ function App() {
   const handleBasicInfoSubmit = (e) => {
     e.preventDefault()
     setOnboardingError('')
-    if (!onboardingPhone.trim()) {
-      setOnboardingError('Phone number is required.')
+    if (!onboardingPhone.trim() && !onboardingEmail.trim()) {
+      setOnboardingError('Either Phone Number or Email is required.')
       return
     }
     if (!onboardingName.trim()) {
@@ -234,8 +236,8 @@ function App() {
   const handleSmsAlertRegister = async (e) => {
     e.preventDefault()
     setOnboardingError('')
-    if (!onboardingPhone.trim()) {
-      setOnboardingError('Phone number is required for SMS Alerts.')
+    if (!onboardingPhone.trim() && !onboardingEmail.trim()) {
+      setOnboardingError('Either Phone Number or Email is required.')
       return
     }
 
@@ -245,7 +247,8 @@ function App() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          phone_number: onboardingPhone,
+          phone_number: onboardingPhone.trim() || null,
+          email: onboardingEmail.trim() || null,
           preferred_language: onboardingLang,
           region: onboardingRegion || null
         })
@@ -254,7 +257,7 @@ function App() {
       if (!response.ok) throw new Error('Registration failed')
 
       const profile = {
-        phone_number: onboardingPhone,
+        phone_number: onboardingPhone.trim() || onboardingEmail.trim(),
         name: onboardingName,
         preferred_language: onboardingLang,
         country: onboardingCountry,
@@ -286,14 +289,14 @@ function App() {
     setShowSmsPopup(false)
   }
 
-  // --- FISHERMAN SMS SIGNUP ---
+  // --- FISHERMAN SMS & EMAIL SIGNUP ---
   const handleSubscribe = async (e) => {
     e.preventDefault()
     setSubSuccess(false)
     setSubError('')
     
-    if (!phoneNumber.trim()) {
-      setSubError('Phone number is required.')
+    if (!phoneNumber.trim() && !email.trim()) {
+      setSubError('Either Phone Number or Email is required.')
       return
     }
 
@@ -303,7 +306,8 @@ function App() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          phone_number: phoneNumber,
+          phone_number: phoneNumber.trim() || null,
+          email: email.trim() || null,
           preferred_language: subLanguage,
           region: subRegion || null
         })
@@ -313,6 +317,7 @@ function App() {
       
       setSubSuccess(true)
       setPhoneNumber('')
+      setEmail('')
     } catch (err) {
       console.error(err)
       setSubError('Failed to register. Please check your connection.')
@@ -649,6 +654,24 @@ function App() {
                 />
               </div>
 
+              <div>
+                <label className={`text-[10px] font-bold uppercase block mb-1 ${theme === 'dark' ? 'text-[#71C7BD]' : 'text-slate-455'}`}>
+                  Enter email address
+                </label>
+                <input
+                  type="email"
+                  placeholder="fisherman@example.com"
+                  value={onboardingEmail}
+                  onChange={(e) => setOnboardingEmail(e.target.value)}
+                  disabled={onboardingSubmitting}
+                  className={`w-full text-xs rounded p-2 focus:outline-none transition-colors duration-200 ${
+                    theme === 'dark' 
+                      ? 'bg-[#1E6E6F]/30 border border-[#71C7BD]/40 text-white focus:ring-1 focus:ring-[#4EC6D4]' 
+                      : 'bg-[#F3B900] border border-slate-350 text-slate-800 focus:ring-1 focus:ring-[#FA7301]'
+                  }`}
+                />
+              </div>
+
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className={`text-[10px] font-bold uppercase block mb-1 ${theme === 'dark' ? 'text-[#71C7BD]' : 'text-slate-455'}`}>Language</label>
@@ -869,6 +892,23 @@ function App() {
                   placeholder="+919876543210"
                   value={onboardingPhone}
                   onChange={(e) => setOnboardingPhone(e.target.value)}
+                  className={`w-full text-xs rounded p-2 focus:outline-none transition-colors duration-200 ${
+                    theme === 'dark' 
+                      ? 'bg-[#1E6E6F]/30 border border-[#71C7BD]/40 text-white focus:ring-1 focus:ring-[#4EC6D4]' 
+                      : 'bg-[#F3B900] border border-slate-350 text-slate-800 focus:ring-1 focus:ring-[#FA7301]'
+                  }`}
+                />
+              </div>
+
+              <div>
+                <label className={`text-[10px] font-bold uppercase block mb-1 ${theme === 'dark' ? 'text-[#71C7BD]' : 'text-slate-455'}`}>
+                  Email Address
+                </label>
+                <input
+                  type="email"
+                  placeholder="fisherman@example.com"
+                  value={onboardingEmail}
+                  onChange={(e) => setOnboardingEmail(e.target.value)}
                   className={`w-full text-xs rounded p-2 focus:outline-none transition-colors duration-200 ${
                     theme === 'dark' 
                       ? 'bg-[#1E6E6F]/30 border border-[#71C7BD]/40 text-white focus:ring-1 focus:ring-[#4EC6D4]' 
@@ -1556,7 +1596,7 @@ function App() {
                                   theme === 'dark' ? 'hover:bg-[#F3B900]/5 text-[#B6E6E9]' : 'hover:bg-[#F3B900] text-slate-600'
                                 }`}>
                                   <td className="p-2 font-bold text-slate-700 dark:text-white">#{log.advisory_id}</td>
-                                  <td className="p-2">{log.recipient_phone}</td>
+                                  <td className="p-2">{log.recipient_phone || log.recipient_email}</td>
                                   <td className="p-2">
                                     <span className={`px-1 py-0.2 rounded border text-[9px] ${badgeStyle}`}>
                                       {log.status.toUpperCase()}

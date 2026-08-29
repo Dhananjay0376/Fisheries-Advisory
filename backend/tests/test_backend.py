@@ -1,3 +1,7 @@
+import os
+# Force in-memory SQLite for testing to prevent tests from querying production databases
+os.environ["DATABASE_URL"] = "sqlite:///:memory:"
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine

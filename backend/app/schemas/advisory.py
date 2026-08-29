@@ -30,7 +30,8 @@ class AdvisoryResponse(AdvisoryBase):
 # --- SUBSCRIBER SCHEMAS ---
 
 class SubscriberBase(BaseModel):
-    phone_number: str = Field(..., description="Phone number with country code", examples=["+919876543210"])
+    phone_number: Optional[str] = Field(None, description="Phone number with country code", examples=["+919876543210"])
+    email: Optional[str] = Field(None, description="Email address of the subscriber", examples=["fisherman@example.com"])
     preferred_language: str = Field("en", description="ISO code (en, ta, te, hi)", examples=["ta"])
     region: Optional[str] = Field(None, examples=["Chennai Coastal"])
 
@@ -89,7 +90,8 @@ class TokenData(BaseModel):
 class BroadcastLogResponse(BaseModel):
     id: int
     advisory_id: int
-    recipient_phone: str
+    recipient_phone: Optional[str] = None
+    recipient_email: Optional[str] = None
     status: str
     error_message: Optional[str] = None
     sent_at: datetime

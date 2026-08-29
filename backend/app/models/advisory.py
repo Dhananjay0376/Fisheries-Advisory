@@ -29,7 +29,8 @@ class Subscriber(Base):
     __tablename__ = "subscribers"
 
     id = Column(Integer, primary_key=True, index=True)
-    phone_number = Column(String(20), unique=True, index=True, nullable=False)
+    phone_number = Column(String(20), unique=True, index=True, nullable=True)
+    email = Column(String(100), unique=True, index=True, nullable=True)
     preferred_language = Column(String(10), nullable=False, default="en")
     region = Column(String(100), nullable=True)
     is_active = Column(Boolean, default=True)
@@ -50,7 +51,8 @@ class BroadcastLog(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     advisory_id = Column(Integer, ForeignKey("advisories.id", ondelete="CASCADE"), nullable=False)
-    recipient_phone = Column(String(20), nullable=False)
+    recipient_phone = Column(String(20), nullable=True)
+    recipient_email = Column(String(100), nullable=True)
     status = Column(String(20), nullable=False)  # success, failed, skipped
     error_message = Column(Text, nullable=True)
     sent_at = Column(DateTime, default=datetime.utcnow)

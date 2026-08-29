@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     
     SECRET_KEY: str = "replace-with-a-real-secure-key"
     ADMIN_API_KEY: str = "dev-admin-secret-key"
+    RESEND_API_KEY: str = "your_resend_api_key_here"
 
     # Allow reading from environment or .env file
     model_config = SettingsConfigDict(

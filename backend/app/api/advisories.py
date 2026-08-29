@@ -13,6 +13,7 @@ from app.schemas.advisory import (
     BroadcastLogResponse
 )
 from app.services.sms import sms_service
+from app.utils.email import send_email_advisory
 from app.api.deps import get_current_user
 
 router = APIRouter()
@@ -153,18 +154,31 @@ def list_advisories(
 
 @router.post("/subscribers", response_model=SubscriberResponse, status_code=status.HTTP_201_CREATED, tags=["subscribers"])
 def subscribe(subscriber: SubscriberCreate, db: Session = Depends(get_db)):
-    """Register or re-enable a subscriber phone number for SMS notifications. Open to public."""
-    existing = db.query(Subscriber).filter(Subscriber.phone_number == subscriber.phone_number).first()
+    """Register or re-enable a subscriber for SMS and/or Email notifications. Open to public."""
+    if not subscriber.phone_number and not subscriber.email:
+        raise HTTPException(status_code=400, detail="Must provide either a phone number or an email address")
+
+    existing = None
+    if subscriber.phone_number:
+        existing = db.query(Subscriber).filter(Subscriber.phone_number == subscriber.phone_number).first()
+    elif subscriber.email:
+        existing = db.query(Subscriber).filter(Subscriber.email == subscriber.email).first()
+
     if existing:
         existing.is_active = True
         existing.preferred_language = subscriber.preferred_language
         existing.region = subscriber.region
+        if subscriber.phone_number:
+            existing.phone_number = subscriber.phone_number
+        if subscriber.email:
+            existing.email = subscriber.email
         db.commit()
         db.refresh(existing)
         return existing
     
     db_sub = Subscriber(
         phone_number=subscriber.phone_number,
+        email=subscriber.email,
         preferred_language=subscriber.preferred_language,
         region=subscriber.region,
         is_active=True
@@ -209,13 +223,20 @@ def broadcast_advisory(
         if not is_subscriber_in_advisory_zone(sub, advisory, region_coords):
             skipped_count += 1
             # Record skipped log
-            skipped_log = BroadcastLog(
-                advisory_id=advisory.id,
-                recipient_phone=sub.phone_number,
-                status="skipped",
-                error_message="Subscriber outside advisory region radius"
-            )
-            db.add(skipped_log)
+            if sub.phone_number:
+                db.add(BroadcastLog(
+                    advisory_id=advisory.id,
+                    recipient_phone=sub.phone_number,
+                    status="skipped",
+                    error_message="Subscriber outside advisory region radius"
+                ))
+            if sub.email:
+                db.add(BroadcastLog(
+                    advisory_id=advisory.id,
+                    recipient_email=sub.email,
+                    status="skipped",
+                    error_message="Subscriber outside advisory region radius"
+                ))
             continue
             
         # 2. Pick Language translation
@@ -231,21 +252,39 @@ def broadcast_advisory(
         else:
             msg_body = f"[{advisory.title}] {advisory.content_en}"
         
-        # 3. Dispatch SMS
-        res = sms_service.send_sms(sub.phone_number, msg_body)
-        sent_results.append(res)
-        
-        # 4. Write Audit Log
-        status_val = "success" if res.get("status") == "success" else "failed"
-        err_msg = res.get("error") if status_val == "failed" else None
-        
-        log_entry = BroadcastLog(
-            advisory_id=advisory.id,
-            recipient_phone=sub.phone_number,
-            status=status_val,
-            error_message=err_msg
-        )
-        db.add(log_entry)
+        # 3. Dispatch SMS if phone is present
+        if sub.phone_number:
+            res = sms_service.send_sms(sub.phone_number, msg_body)
+            status_val = "success" if res.get("status") == "success" else "failed"
+            err_msg = res.get("error") if status_val == "failed" else None
+            
+            db.add(BroadcastLog(
+                advisory_id=advisory.id,
+                recipient_phone=sub.phone_number,
+                status=status_val,
+                error_message=err_msg
+            ))
+            sent_results.append(res)
+            
+        # 4. Dispatch Email if email is present
+        if sub.email:
+            html_body = f"""
+            <h3>{advisory.title}</h3>
+            <p>{msg_body}</p>
+            <hr />
+            <small>This is an automated safety alert from the Fisheries Advisory Portal.</small>
+            """
+            email_success = send_email_advisory(sub.email, f"Fisheries Advisory: {advisory.title}", html_body)
+            status_email = "success" if email_success else "failed"
+            err_email = None if email_success else "Resend API dispatch failed"
+            
+            db.add(BroadcastLog(
+                advisory_id=advisory.id,
+                recipient_email=sub.email,
+                status=status_email,
+                error_message=err_email
+            ))
+            sent_results.append({"channel": "email", "recipient": sub.email, "status": status_email})
         
     db.commit()  # Commit all broadcast logs
         
