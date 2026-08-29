@@ -1,3 +1,9 @@
+import os
+import sys
+
+# Add parent directory of 'app' to Python path for Vercel execution context
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
