@@ -1,35 +1,24 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from fastapi.security import APIKeyHeader
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime
 from math import radians, cos, sin, asin, sqrt
 
 from app.database import get_db
-from app.models.advisory import Advisory, Subscriber
+from app.models.advisory import Advisory, Subscriber, Region, BroadcastLog, User
 from app.schemas.advisory import (
     AdvisoryCreate, AdvisoryResponse,
-    SubscriberCreate, SubscriberResponse
+    SubscriberCreate, SubscriberResponse,
+    RegionCreate, RegionResponse,
+    BroadcastLogResponse
 )
 from app.services.sms import sms_service
-from app.config import settings
+from app.api.deps import get_current_user
 
 router = APIRouter()
 
-# --- ADMIN API KEY SECURITY ---
-api_key_header = APIKeyHeader(name="X-Admin-API-Key", auto_error=True)
-
-def verify_admin_key(api_key: str = Depends(api_key_header)):
-    if api_key != settings.ADMIN_API_KEY:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or missing Admin API Key"
-        )
-    return api_key
-
-
 # --- GEOSPATIAL FILTERING UTILITY ---
-def is_subscriber_in_advisory_zone(sub: Subscriber, advisory: Advisory) -> bool:
+def is_subscriber_in_advisory_zone(sub: Subscriber, advisory: Advisory, region_coords: dict) -> bool:
     """
     Checks if a subscriber is within the advisory's geo-radius.
     If no coordinates are specified on the advisory, returns True (global alert).
@@ -41,17 +30,10 @@ def is_subscriber_in_advisory_zone(sub: Subscriber, advisory: Advisory) -> bool:
     if not sub.region:
         return True
         
-    # Basic mapping of common regional keywords to coordinates
-    region_coords = {
-        "chennai": (13.0827, 80.2707),
-        "vizag": (17.6868, 83.2185),
-        "kochi": (9.9312, 76.2673),
-        "kerala": (10.8505, 76.2711),
-        "mumbai": (19.0760, 72.8777)
-    }
-    
     sub_region_lower = sub.region.lower()
     matched_coord = None
+    
+    # Try to match the subscriber's region string against DB region names
     for r_name, coords in region_coords.items():
         if r_name in sub_region_lower:
             matched_coord = coords
@@ -80,14 +62,57 @@ def is_subscriber_in_advisory_zone(sub: Subscriber, advisory: Advisory) -> bool:
     return distance <= max_radius
 
 
+# --- REGION CRUD ENDPOINTS ---
+
+@router.get("/regions", response_model=List[RegionResponse], tags=["regions"])
+def list_regions(db: Session = Depends(get_db)):
+    """List all registered coastal regions and their coordinates."""
+    return db.query(Region).all()
+
+@router.post("/regions", response_model=RegionResponse, status_code=status.HTTP_201_CREATED, tags=["regions"])
+def create_region(
+    region: RegionCreate, 
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user)  # Requires admin login JWT
+):
+    """Add a new coastal region. Requires Admin authentication."""
+    existing = db.query(Region).filter(Region.name == region.name.lower()).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Region name already registered")
+        
+    db_region = Region(
+        name=region.name.lower(),
+        latitude=region.latitude,
+        longitude=region.longitude
+    )
+    db.add(db_region)
+    db.commit()
+    db.refresh(db_region)
+    return db_region
+
+@router.delete("/regions/{region_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["regions"])
+def delete_region(
+    region_id: int, 
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user)
+):
+    """Delete a coastal region. Requires Admin authentication."""
+    region = db.query(Region).filter(Region.id == region_id).first()
+    if not region:
+        raise HTTPException(status_code=404, detail="Region not found")
+    db.delete(region)
+    db.commit()
+
+
 # --- ADVISORY ENDPOINTS ---
 
-@router.post("/advisories", response_model=AdvisoryResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/advisories", response_model=AdvisoryResponse, status_code=status.HTTP_201_CREATED, tags=["advisories"])
 def create_advisory(
     advisory: AdvisoryCreate, 
     db: Session = Depends(get_db),
-    _: str = Depends(verify_admin_key)
+    _: User = Depends(get_current_user)  # Requires admin login JWT
 ):
+    """Create a new safety or fishing zone advisory. Requires Admin authentication."""
     db_advisory = Advisory(
         title=advisory.title,
         type=advisory.type,
@@ -106,7 +131,7 @@ def create_advisory(
     db.refresh(db_advisory)
     return db_advisory
 
-@router.get("/advisories", response_model=List[AdvisoryResponse])
+@router.get("/advisories", response_model=List[AdvisoryResponse], tags=["advisories"])
 def list_advisories(
     type: Optional[str] = None,
     severity: Optional[str] = None,
@@ -114,6 +139,7 @@ def list_advisories(
     limit: int = 100,
     db: Session = Depends(get_db)
 ):
+    """Retrieve list of active safety and catch advisories. Open to public."""
     query = db.query(Advisory)
     if type:
         query = query.filter(Advisory.type == type)
@@ -122,10 +148,12 @@ def list_advisories(
     
     return query.order_by(Advisory.created_at.desc()).offset(skip).limit(limit).all()
 
+
 # --- SUBSCRIBER ENDPOINTS ---
 
-@router.post("/subscribers", response_model=SubscriberResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/subscribers", response_model=SubscriberResponse, status_code=status.HTTP_201_CREATED, tags=["subscribers"])
 def subscribe(subscriber: SubscriberCreate, db: Session = Depends(get_db)):
+    """Register or re-enable a subscriber phone number for SMS notifications. Open to public."""
     existing = db.query(Subscriber).filter(Subscriber.phone_number == subscriber.phone_number).first()
     if existing:
         existing.is_active = True
@@ -146,18 +174,21 @@ def subscribe(subscriber: SubscriberCreate, db: Session = Depends(get_db)):
     db.refresh(db_sub)
     return db_sub
 
-@router.get("/subscribers", response_model=List[SubscriberResponse])
+@router.get("/subscribers", response_model=List[SubscriberResponse], tags=["subscribers"])
 def get_subscribers(db: Session = Depends(get_db)):
+    """List all subscribers. Open to public for testing."""
     return db.query(Subscriber).all()
 
-# --- BROADCAST ALERT ENDPOINT ---
 
-@router.post("/advisories/{advisory_id}/broadcast")
+# --- BROADCAST ALERT ENDPOINT & LOGGING ---
+
+@router.post("/advisories/{advisory_id}/broadcast", tags=["broadcasting"])
 def broadcast_advisory(
     advisory_id: int, 
     db: Session = Depends(get_db),
-    _: str = Depends(verify_admin_key)
+    _: User = Depends(get_current_user)  # Requires admin login JWT
 ):
+    """Broadcast an advisory to all subscribers in scope. Requires Admin authentication."""
     advisory = db.query(Advisory).filter(Advisory.id == advisory_id).first()
     if not advisory:
         raise HTTPException(status_code=404, detail="Advisory not found")
@@ -166,15 +197,28 @@ def broadcast_advisory(
     if not subscribers:
         return {"message": "No active subscribers to broadcast to.", "sent_count": 0}
     
+    # Pre-load regions coordinates dictionary from database to prevent N+1 query overhead
+    db_regions = db.query(Region).all()
+    region_coords = {r.name.lower(): (r.latitude, r.longitude) for r in db_regions}
+
     sent_results = []
     skipped_count = 0
     
     for sub in subscribers:
-        # Check if the subscriber falls within the advisory region
-        if not is_subscriber_in_advisory_zone(sub, advisory):
+        # 1. Geographic Filter check
+        if not is_subscriber_in_advisory_zone(sub, advisory, region_coords):
             skipped_count += 1
+            # Record skipped log
+            skipped_log = BroadcastLog(
+                advisory_id=advisory.id,
+                recipient_phone=sub.phone_number,
+                status="skipped",
+                error_message="Subscriber outside advisory region radius"
+            )
+            db.add(skipped_log)
             continue
             
+        # 2. Pick Language translation
         lang = sub.preferred_language.lower()
         msg_body = ""
         
@@ -187,8 +231,23 @@ def broadcast_advisory(
         else:
             msg_body = f"[{advisory.title}] {advisory.content_en}"
         
+        # 3. Dispatch SMS
         res = sms_service.send_sms(sub.phone_number, msg_body)
         sent_results.append(res)
+        
+        # 4. Write Audit Log
+        status_val = "success" if res.get("status") == "success" else "failed"
+        err_msg = res.get("error") if status_val == "failed" else None
+        
+        log_entry = BroadcastLog(
+            advisory_id=advisory.id,
+            recipient_phone=sub.phone_number,
+            status=status_val,
+            error_message=err_msg
+        )
+        db.add(log_entry)
+        
+    db.commit()  # Commit all broadcast logs
         
     return {
         "message": f"Broadcast triggered for advisory #{advisory_id}",
@@ -197,3 +256,11 @@ def broadcast_advisory(
         "skipped_out_of_zone": skipped_count,
         "results": sent_results
     }
+
+@router.get("/broadcast-logs", response_model=List[BroadcastLogResponse], tags=["broadcasting"])
+def get_broadcast_logs(
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user)  # Requires admin login JWT
+):
+    """Retrieve audit history of alert broadcasts. Requires Admin authentication."""
+    return db.query(BroadcastLog).order_by(BroadcastLog.sent_at.desc()).all()

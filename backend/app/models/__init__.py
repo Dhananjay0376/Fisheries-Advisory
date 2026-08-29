@@ -1,5 +1,4 @@
 from app.database import Base
-from app.models.advisory import Advisory, Subscriber
+from app.models.advisory import Advisory, Subscriber, Region, BroadcastLog, User
 
-# Expose models for SQLAlchemy imports / migrations
-__all__ = ["Base", "Advisory", "Subscriber"]
+__all__ = ["Base", "Advisory", "Subscriber", "Region", "BroadcastLog", "User"]
