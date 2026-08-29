@@ -22,7 +22,7 @@ import {
 import { useTranslation } from 'react-i18next'
 import MapView from './components/MapView'
 
-const BACKEND_URL = 'http://127.0.0.1:8000'
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://127.0.0.1:8000'
 
 function App() {
   // --- STATE SYSTEM ---
