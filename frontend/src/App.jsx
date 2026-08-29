@@ -19,19 +19,17 @@ import {
   List
 } from 'lucide-react'
 
-// Import localization bundles
-import en from './locales/en.json'
-import ta from './locales/ta.json'
-import hi from './locales/hi.json'
+import { useTranslation } from 'react-i18next'
+import MapView from './components/MapView'
 
-const locales = { en, ta, hi }
 const BACKEND_URL = 'http://127.0.0.1:8000'
 
 function App() {
   // --- STATE SYSTEM ---
+  const { t, i18n } = useTranslation()
+  const lang = i18n.language
   const [currentTab, setCurrentTab] = useState('fisherman') // 'fisherman' or 'admin'
-  const [lang, setLang] = useState('en')
-  const t = (key) => locales[lang][key] || locales['en'][key] || key
+  const [fishermanSubTab, setFishermanSubTab] = useState('advisories') // 'advisories' or 'map'
 
   const [isOnline, setIsOnline] = useState(navigator.onLine)
   const [subOfflineSaved, setSubOfflineSaved] = useState(false)
@@ -550,16 +548,24 @@ function App() {
           </div>
           
           {/* Language Selector */}
-          <div className="flex items-center bg-sky-850 bg-sky-800 rounded px-2 py-0.5 text-xs border border-sky-650">
-            <Globe className="h-3 w-3 mr-1 text-sky-200" />
+          <div className="flex items-center bg-sky-800 rounded px-2 py-0.5 text-xs border border-sky-600">
+            <Globe className="h-3.5 w-3.5 mr-1 text-sky-200" />
             <select 
               value={lang} 
-              onChange={(e) => setLang(e.target.value)}
-              className="bg-transparent text-white focus:outline-none cursor-pointer font-medium"
+              onChange={(e) => i18n.changeLanguage(e.target.value)}
+              className="bg-transparent text-white focus:outline-none cursor-pointer font-medium text-xs"
             >
-              <option value="en" className="text-slate-800">EN</option>
-              <option value="ta" className="text-slate-800">தமிழ்</option>
-              <option value="hi" className="text-slate-800">हिन्दी</option>
+              <option value="en" className="text-slate-800">English</option>
+              <option value="hi" className="text-slate-800">हिन्दी (Hindi)</option>
+              <option value="ta" className="text-slate-800">தமிழ் (Tamil)</option>
+              <option value="gu" className="text-slate-800">ગુજરાતી (Gujarati)</option>
+              <option value="mr" className="text-slate-800">मराठी (Marathi)</option>
+              <option value="kok" className="text-slate-800">कोंकणी (Konkani)</option>
+              <option value="kn" className="text-slate-800">ಕನ್ನಡ (Kannada)</option>
+              <option value="ml" className="text-slate-800">മലയാളം (Malayalam)</option>
+              <option value="te" className="text-slate-800">తెలుగు (Telugu)</option>
+              <option value="or" className="text-slate-800">ଓଡ଼ିଆ (Odia)</option>
+              <option value="bn" className="text-slate-800">বাংলা (Bengali)</option>
             </select>
           </div>
         </div>
@@ -610,8 +616,40 @@ function App() {
         {/* ==================== VIEW 1: FISHERMAN PUBLIC VIEW ==================== */}
         {currentTab === 'fisherman' && (
           <>
-            {/* GPS Location Safety Radar */}
-            <section className="bg-white p-3.5 rounded-lg border border-slate-200 shadow-sm space-y-2.5">
+            {/* Fisherman Sub-Navigation */}
+            <div className="flex border border-slate-200 bg-white rounded-lg p-1 shadow-sm text-xs font-bold gap-1">
+              <button
+                onClick={() => setFishermanSubTab('advisories')}
+                className={`flex-1 py-1.5 rounded transition-all flex items-center justify-center gap-1.5 ${
+                  fishermanSubTab === 'advisories'
+                    ? 'bg-sky-600 text-white shadow-sm'
+                    : 'text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                <AlertTriangle className="h-3.5 w-3.5" />
+                Advisories & Radar
+              </button>
+              <button
+                onClick={() => setFishermanSubTab('map')}
+                className={`flex-1 py-1.5 rounded transition-all flex items-center justify-center gap-1.5 ${
+                  fishermanSubTab === 'map'
+                    ? 'bg-sky-600 text-white shadow-sm'
+                    : 'text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                <MapPin className="h-3.5 w-3.5" />
+                Interactive Map & GPS
+              </button>
+            </div>
+
+            {fishermanSubTab === 'map' && (
+              <MapView isOnline={isOnline} />
+            )}
+
+            {fishermanSubTab === 'advisories' && (
+              <>
+                {/* GPS Location Safety Radar */}
+                <section className="bg-white p-3.5 rounded-lg border border-slate-200 shadow-sm space-y-2.5">
               <div className="flex justify-between items-center border-b border-slate-100 pb-1.5">
                 <h3 className="font-bold text-xs text-slate-800 flex items-center gap-1">
                   <MapPin className="h-4.5 w-4.5 text-sky-655 text-sky-600 animate-bounce" />
@@ -834,6 +872,8 @@ function App() {
                 </div>
               )}
             </section>
+              </>
+            )}
           </>
         )}
 
