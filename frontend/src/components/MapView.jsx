@@ -65,6 +65,8 @@ function MapView({ isOnline }) {
   const [tilesSaved, setTilesSaved] = useState(false)
   const [cachedTileCount, setCachedTileCount] = useState(0)
   const [saveProgress, setSaveProgress] = useState(0)
+  const [weatherData, setWeatherData] = useState(null)
+  const [loadingWeather, setLoadingWeather] = useState(false)
 
   // Load last known position
   const lastSavedPos = (() => {
@@ -415,6 +417,72 @@ function MapView({ isOnline }) {
         {cachedTileCount > 0 && isOnline && (
           <div className="text-[10px] text-slate-500">
             Map will continue working even without internet. Tiles are stored on your device.
+          </div>
+        )}
+      </div>
+
+      {/* Weather ML Prediction */}
+      <div className="bg-white rounded-lg border border-slate-200 shadow-sm p-3 space-y-2">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-xs font-semibold text-slate-700">
+              ⛅ ML Weather Prediction
+            </p>
+            <p className="text-[10px] text-slate-400 mt-0.5">
+              Predict weather safety for your current location.
+            </p>
+          </div>
+          <button
+            onClick={async () => {
+              const pos = position || lastSavedPos
+              if (!pos) {
+                alert('Please wait for GPS location or ensure last location is saved.')
+                return
+              }
+              setLoadingWeather(true)
+              try {
+                // Using relative path assuming API proxy is setup, else localhost fallback
+                const baseUrl = window.location.hostname === 'localhost' ? 'http://127.0.0.1:8000' : ''
+                const res = await fetch(`${baseUrl}/api/predict-weather?lat=${pos.lat}&lon=${pos.lng}`)
+                if (!res.ok) throw new Error('Failed to fetch prediction')
+                const data = await res.json()
+                setWeatherData(data)
+              } catch (err) {
+                console.error(err)
+                alert('Could not fetch weather prediction. Ensure backend is running.')
+              } finally {
+                setLoadingWeather(false)
+              }
+            }}
+            disabled={loadingWeather || (!position && !lastSavedPos)}
+            className={`text-[10px] px-3 py-1.5 rounded font-semibold transition-colors whitespace-nowrap ${
+              loadingWeather || (!position && !lastSavedPos)
+                ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                : 'bg-indigo-600 text-white hover:bg-indigo-700'
+            }`}
+          >
+            {loadingWeather ? '⏳ Predicting...' : '🔮 Predict Safety'}
+          </button>
+        </div>
+
+        {weatherData && (
+          <div className={`mt-2 p-3 rounded border text-sm ${
+            weatherData.safety.level === 'safe' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' :
+            weatherData.safety.level === 'danger' ? 'bg-rose-50 border-rose-200 text-rose-800' :
+            'bg-amber-50 border-amber-200 text-amber-800'
+          }`}>
+            <div className="font-bold mb-1 flex items-center gap-2">
+              <span className="text-xl">
+                {weatherData.safety.level === 'safe' ? '🟢' : weatherData.safety.level === 'danger' ? '🔴' : '🟡'}
+              </span>
+              {weatherData.prediction.weather} ({(weatherData.prediction.confidence * 100).toFixed(1)}%)
+            </div>
+            <p className="text-xs opacity-90 leading-tight">
+              {weatherData.safety.advice}
+            </p>
+            <div className="text-[9px] opacity-70 mt-2 text-right">
+              Powered by {weatherData.model_info.name} ({weatherData.mode})
+            </div>
           </div>
         )}
       </div>

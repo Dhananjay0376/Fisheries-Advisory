@@ -34,6 +34,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.on_event("startup")
+def startup_event():
+    from app.services.ml import ml_service
+    ml_service.load_model()
+
 # Attach API endpoints
 app.include_router(advisories_router, prefix="/api")
 app.include_router(auth_router, prefix="/api")
