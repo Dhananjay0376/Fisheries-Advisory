@@ -12,6 +12,9 @@ class AdvisoryBase(BaseModel):
     content_ta: Optional[str] = Field(None, description="Tamil translation")
     content_te: Optional[str] = Field(None, description="Telugu translation")
     content_hi: Optional[str] = Field(None, description="Hindi translation")
+    latitude: Optional[float] = Field(None, description="Latitude coordinates", examples=[12.9716])
+    longitude: Optional[float] = Field(None, description="Longitude coordinates", examples=[80.2408])
+    radius_km: Optional[float] = Field(None, description="Advisory coverage radius in kilometers", examples=[50.0])
     valid_until: Optional[datetime] = None
 
 class AdvisoryCreate(AdvisoryBase):
