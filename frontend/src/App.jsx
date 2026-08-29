@@ -34,10 +34,12 @@ function App() {
   const t = (key) => locales[lang][key] || locales['en'][key] || key
 
   const [isOnline, setIsOnline] = useState(navigator.onLine)
+  const [subOfflineSaved, setSubOfflineSaved] = useState(false)
   const [advisories, setAdvisories] = useState([])
   const [regions, setRegions] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  const [filter, setFilter] = useState('all')
 
   // GPS Radar states
   const [userCoords, setUserCoords] = useState(null)
@@ -84,12 +86,63 @@ function App() {
   // Broadcast History Logs state
   const [broadcastLogs, setBroadcastLogs] = useState([])
 
+  // Sync pending subscriptions from local storage in background when back online
+  const syncPendingSubscriptions = async () => {
+    if (!navigator.onLine) return
+    const pending = localStorage.getItem('pending_subscriptions')
+    if (!pending) return
+
+    let list = []
+    try {
+      list = JSON.parse(pending)
+    } catch {
+      return
+    }
+
+    if (list.length === 0) return
+
+    console.log(`Syncing ${list.length} pending offline subscriptions...`)
+    const remaining = []
+
+    for (const sub of list) {
+      try {
+        const response = await fetch(`${BACKEND_URL}/api/subscribers`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(sub)
+        })
+        if (!response.ok) {
+          remaining.push(sub)
+        }
+      } catch (err) {
+        console.error('Failed syncing subscription:', err)
+        remaining.push(sub)
+      }
+    }
+
+    if (remaining.length > 0) {
+      localStorage.setItem('pending_subscriptions', JSON.stringify(remaining))
+    } else {
+      localStorage.removeItem('pending_subscriptions')
+      console.log('All pending subscriptions synced successfully!')
+    }
+  }
+
   // --- CONNECTIVITY MONITOR ---
   useEffect(() => {
-    const handleOnline = () => setIsOnline(true)
+    const handleOnline = () => {
+      setIsOnline(true)
+      syncPendingSubscriptions()
+    }
     const handleOffline = () => setIsOnline(false)
+    
     window.addEventListener('online', handleOnline)
     window.addEventListener('offline', handleOffline)
+
+    if (navigator.onLine) {
+      syncPendingSubscriptions()
+    }
+
     return () => {
       window.removeEventListener('online', handleOnline)
       window.removeEventListener('offline', handleOffline)
@@ -100,10 +153,15 @@ function App() {
   const fetchGlobalData = async () => {
     setLoading(true)
     setError(null)
+    
+    // Set 5-second timeout controller for slow local bandwidth/spotty networks
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 5000)
+
     try {
       if (navigator.onLine) {
         // Fetch advisories
-        const advResp = await fetch(`${BACKEND_URL}/api/advisories`)
+        const advResp = await fetch(`${BACKEND_URL}/api/advisories`, { signal: controller.signal })
         if (advResp.ok) {
           const advData = await advResp.json()
           setAdvisories(advData)
@@ -111,13 +169,15 @@ function App() {
         }
 
         // Fetch regions
-        const regResp = await fetch(`${BACKEND_URL}/api/regions`)
+        const regResp = await fetch(`${BACKEND_URL}/api/regions`, { signal: controller.signal })
         if (regResp.ok) {
           const regData = await regResp.json()
           setRegions(regData)
           localStorage.setItem('cached_regions', JSON.stringify(regData))
         }
+        clearTimeout(timeoutId)
       } else {
+        clearTimeout(timeoutId)
         // Load fallback storage cache
         const cachedAdv = localStorage.getItem('cached_advisories')
         if (cachedAdv) setAdvisories(JSON.parse(cachedAdv))
@@ -126,8 +186,10 @@ function App() {
         if (cachedReg) setRegions(JSON.parse(cachedReg))
       }
     } catch (err) {
+      clearTimeout(timeoutId)
       console.error(err)
-      setError('Could not retrieve new records.')
+      const isTimeout = err.name === 'AbortError'
+      setError(isTimeout ? 'Request timed out (low bandwidth). Loaded cached data.' : 'Could not retrieve new records.')
       // Offline fallback on crash
       const cachedAdv = localStorage.getItem('cached_advisories')
       if (cachedAdv) setAdvisories(JSON.parse(cachedAdv))
@@ -231,9 +293,21 @@ function App() {
   }
 
   // --- FISHERMAN SMS SIGNUP ---
+  const savePendingSubscription = (payload) => {
+    try {
+      const pending = JSON.parse(localStorage.getItem('pending_subscriptions') || '[]')
+      const filtered = pending.filter(item => item.phone_number !== payload.phone_number)
+      filtered.push(payload)
+      localStorage.setItem('pending_subscriptions', JSON.stringify(filtered))
+    } catch (e) {
+      console.error('Failed to save pending subscription', e)
+    }
+  }
+
   const handleSubscribe = async (e) => {
     e.preventDefault()
     setSubSuccess(false)
+    setSubOfflineSaved(false)
     setSubError('')
     
     if (!phoneNumber.trim()) {
@@ -241,25 +315,55 @@ function App() {
       return
     }
 
+    const payload = {
+      phone_number: phoneNumber,
+      preferred_language: subLanguage,
+      region: subRegion || null
+    }
+
+    // If completely offline, save locally immediately
+    if (!navigator.onLine) {
+      savePendingSubscription(payload)
+      setSubOfflineSaved(true)
+      setSubSuccess(true)
+      setPhoneNumber('')
+      setSubRegion('')
+      return
+    }
+
     setSubmitting(true)
+    // 5-second timeout for registering on poor connection
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 5000)
+
     try {
       const response = await fetch(`${BACKEND_URL}/api/subscribers`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          phone_number: phoneNumber,
-          preferred_language: subLanguage,
-          region: subRegion || null
-        })
+        body: JSON.stringify(payload),
+        signal: controller.signal
       })
+      clearTimeout(timeoutId)
 
       if (!response.ok) throw new Error('Registration failed')
       
       setSubSuccess(true)
       setPhoneNumber('')
+      setSubRegion('')
     } catch (err) {
+      clearTimeout(timeoutId)
       console.error(err)
-      setSubError('Failed to register. Please check your connection.')
+      
+      // If we encounter a network timeout or connection failure, save offline and inform user
+      if (err.name === 'AbortError' || !navigator.onLine) {
+        savePendingSubscription(payload)
+        setSubOfflineSaved(true)
+        setSubSuccess(true)
+        setPhoneNumber('')
+        setSubRegion('')
+      } else {
+        setSubError('Failed to register. Please check your inputs.')
+      }
     } finally {
       setSubmitting(false)
     }
@@ -517,6 +621,7 @@ function App() {
                 <span className="text-[8px] bg-slate-100 text-slate-500 font-bold px-1.5 py-0.5 rounded-full">Offline Friendly</span>
               </div>
 
+<<<<<<< Updated upstream
               {!userCoords ? (
                 <div className="py-2 flex flex-col items-center gap-2">
                   <button
@@ -546,6 +651,79 @@ function App() {
                     <span className="text-slate-500 font-bold">{t('gps_coords')}:</span>
                     <span className="font-mono text-slate-800 font-bold">
                       {userCoords.latitude.toFixed(4)}° N, {userCoords.longitude.toFixed(4)}° E
+=======
+      <main className="flex-1 p-4 space-y-6">
+
+        {/* MAP TAB */}
+        {activeTab === 'map' && (
+          <MapView isOnline={isOnline} />
+        )}
+
+        {/* ADVISORIES TAB */}
+        {activeTab === 'advisories' && (<>
+        <section className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm">
+          <label className="text-xs font-semibold text-slate-500 block mb-2 uppercase tracking-wide">
+            {t('filter_label')}
+          </label>
+          <div className="grid grid-cols-4 gap-1">
+            {[
+              { id: 'all', label: t('filter_all') },
+              { id: 'weather', label: t('filter_weather') },
+              { id: 'fishing_zone', label: t('filter_zone') },
+              { id: 'safety', label: t('filter_safety') }
+            ].map(btn => (
+              <button
+                key={btn.id}
+                onClick={() => setFilter(btn.id)}
+                className={`text-[10px] sm:text-xs font-medium py-1.5 px-1 rounded transition-colors text-center ${
+                  filter === btn.id 
+                    ? 'bg-sky-600 text-white shadow-sm' 
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                {btn.label}
+              </button>
+            ))}
+          </div>
+        </section>
+
+        {/* 3. Advisories List */}
+        <section className="space-y-3">
+          {loading && advisories.length === 0 ? (
+            <div className="text-center py-8 text-slate-400 text-sm">
+              <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-2 text-sky-600" />
+              Loading advisories...
+            </div>
+          ) : filteredAdvisories.length === 0 ? (
+            <div className="text-center py-10 bg-white rounded-lg border border-dashed border-slate-300 text-slate-400 text-sm">
+              <Compass className="h-8 w-8 mx-auto mb-2 text-slate-300" />
+              {t('no_advisories')}
+            </div>
+          ) : (
+            filteredAdvisories.map(item => {
+              const severityColor = 
+                item.severity === 'high' ? 'bg-rose-100 text-rose-800 border-rose-200' :
+                item.severity === 'medium' ? 'bg-amber-100 text-amber-800 border-amber-200' :
+                'bg-emerald-100 text-emerald-800 border-emerald-200';
+              
+              return (
+                <article 
+                  key={item.id}
+                  className="bg-white rounded-lg border border-slate-200 shadow-sm p-4 relative overflow-hidden flex flex-col gap-2"
+                >
+                  <div className="flex justify-between items-start gap-2">
+                    <div className="flex items-center gap-2">
+                      <div className="p-1.5 rounded-lg bg-slate-100">
+                        {getIcon(item.type)}
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-slate-800 text-sm">{item.title}</h3>
+                        <span className="text-[10px] text-slate-400 capitalize">{item.type}</span>
+                      </div>
+                    </div>
+                    <span className={`text-[9px] font-bold tracking-wider px-2 py-0.5 rounded-full border ${severityColor}`}>
+                      {t(`severity_${item.severity}`)}
+>>>>>>> Stashed changes
                     </span>
                     <button 
                       onClick={fetchUserGPS}
@@ -646,6 +824,7 @@ function App() {
                         </span>
                       </div>
 
+<<<<<<< Updated upstream
                       <p className="text-xs text-slate-600 leading-normal font-normal bg-slate-50 p-2 rounded border border-slate-100">
                         {getCardContent(item)}
                       </p>
@@ -717,7 +896,11 @@ function App() {
               {subSuccess && (
                 <div className="bg-emerald-50 text-emerald-800 border border-emerald-200 p-2 rounded text-[10px] flex items-center gap-1.5">
                   <CheckCircle className="h-3.5 w-3.5 text-emerald-600 flex-shrink-0" />
-                  <span>{t('sub_success')}</span>
+                  <span>
+                    {subOfflineSaved
+                      ? (t('sub_offline_success') || 'Saved offline! Your registration will sync when your internet connection is restored.')
+                      : t('sub_success')}
+                  </span>
                 </div>
               )}
 
@@ -1133,7 +1316,6 @@ function App() {
             )}
           </>
         )}
-
       </main>
 
       {/* Footer */}

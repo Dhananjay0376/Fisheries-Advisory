@@ -22,6 +22,7 @@
   "sub_region_placeholder": "Select Harbor / Port",
   "sub_submit_btn": "Register for Alerts",
   "sub_success": "Successfully registered! You will receive SMS alerts.",
+  "sub_offline_success": "Saved offline! Your registration will sync when your connection is restored.",
   "admin_tab": "Admin Control",
   "fisherman_tab": "Fisherman Portal",
   "login_title": "Admin Login",
