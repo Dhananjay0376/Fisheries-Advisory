@@ -39,6 +39,12 @@ function App() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
 
+  // GPS Radar states
+  const [userCoords, setUserCoords] = useState(null)
+  const [gpsLoading, setGpsLoading] = useState(false)
+  const [gpsError, setGpsError] = useState('')
+  const [localWarnings, setLocalWarnings] = useState([])
+
   // Admin JWT states
   const [token, setToken] = useState(sessionStorage.getItem('admin_token') || '')
   const [loginUsername, setLoginUsername] = useState('')
@@ -136,12 +142,64 @@ function App() {
     fetchGlobalData()
   }, [isOnline])
 
+  // --- CLIENT-SIDE HAVERSINE MATH (OFFLINE RADAR) ---
+  const getDistanceKm = (lat1, lon1, lat2, lon2) => {
+    const R = 6371 // Radius of the Earth in km
+    const dLat = (lat2 - lat1) * Math.PI / 180
+    const dLon = (lon2 - lon1) * Math.PI / 180
+    const a = 
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+      Math.sin(dLon / 2) * Math.sin(dLon / 2)
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+    return R * c // Distance in km
+  }
+
+  // --- GET DEVICE GPS LOCATION ---
+  const fetchUserGPS = () => {
+    setGpsLoading(true)
+    setGpsError('')
+    setLocalWarnings([])
+
+    if (!navigator.geolocation) {
+      setGpsError(t('gps_not_supported'))
+      setGpsLoading(false)
+      return
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const lat = position.coords.latitude
+        const lng = position.coords.longitude
+        setUserCoords({ latitude: lat, longitude: lng })
+
+        // Check GPS coordinates against pre-loaded/cached advisories
+        const matchedWarnings = advisories.filter(adv => {
+          if (adv.latitude !== null && adv.longitude !== null) {
+            const dist = getDistanceKm(lat, lng, adv.latitude, adv.longitude)
+            const radius = adv.radius_km !== null ? adv.radius_km : 50.0 // fallback to 50km
+            return dist <= radius
+          }
+          return false
+        })
+
+        setLocalWarnings(matchedWarnings)
+        setGpsLoading(false)
+      },
+      (err) => {
+        console.error(err)
+        setGpsError('Could not acquire GPS satellite fix. Please check location permissions.')
+        setGpsLoading(false)
+      },
+      { enableHighAccuracy: true, timeout: 12000 }
+    )
+  }
+
   // --- ADMIN LOGIN HANDLER ---
   const handleLogin = async (e) => {
     e.preventDefault()
     setLoginError('')
     try {
-      // OAuth2 request requires application/x-www-form-urlencoded format
       const params = new URLSearchParams()
       params.append('username', loginUsername)
       params.append('password', loginPassword)
@@ -373,7 +431,7 @@ function App() {
       case 'safety':
         return <AlertTriangle className="h-5 w-5 text-amber-600" />
       default:
-        return <Globe className="h-5 w-5 text-slate-650" />
+        return <Globe className="h-5 w-5 text-slate-600" />
     }
   }
 
@@ -449,6 +507,81 @@ function App() {
         {/* ==================== VIEW 1: FISHERMAN PUBLIC VIEW ==================== */}
         {currentTab === 'fisherman' && (
           <>
+            {/* GPS Location Safety Radar */}
+            <section className="bg-white p-3.5 rounded-lg border border-slate-200 shadow-sm space-y-2.5">
+              <div className="flex justify-between items-center border-b border-slate-100 pb-1.5">
+                <h3 className="font-bold text-xs text-slate-800 flex items-center gap-1">
+                  <MapPin className="h-4.5 w-4.5 text-sky-655 text-sky-600 animate-bounce" />
+                  {t('gps_panel_title')}
+                </h3>
+                <span className="text-[8px] bg-slate-100 text-slate-500 font-bold px-1.5 py-0.5 rounded-full">Offline Friendly</span>
+              </div>
+
+              {!userCoords ? (
+                <div className="py-2 flex flex-col items-center gap-2">
+                  <button
+                    onClick={fetchUserGPS}
+                    disabled={gpsLoading}
+                    className="bg-sky-600 hover:bg-sky-700 text-white font-bold py-1.5 px-4 rounded text-xs transition-colors flex items-center gap-1.5 disabled:opacity-50"
+                  >
+                    {gpsLoading ? (
+                      <>
+                        <RefreshCw className="h-3 w-3 animate-spin" />
+                        {t('gps_btn_checking')}
+                      </>
+                    ) : (
+                      <>
+                        <MapPin className="h-3.5 w-3.5" />
+                        {t('gps_btn_active')}
+                      </>
+                    )}
+                  </button>
+                  {gpsError && (
+                    <p className="text-[10px] text-rose-650 text-rose-600 font-medium text-center">{gpsError}</p>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center text-[10px] bg-slate-50 p-2 rounded border border-slate-100">
+                    <span className="text-slate-500 font-bold">{t('gps_coords')}:</span>
+                    <span className="font-mono text-slate-800 font-bold">
+                      {userCoords.latitude.toFixed(4)}° N, {userCoords.longitude.toFixed(4)}° E
+                    </span>
+                    <button 
+                      onClick={fetchUserGPS}
+                      className="text-sky-600 hover:underline font-bold"
+                    >
+                      Rescan
+                    </button>
+                  </div>
+
+                  {gpsLoading && (
+                    <div className="text-center py-2 text-[10px] text-slate-400">Scanning location...</div>
+                  )}
+
+                  {/* Warning Alerts Display */}
+                  {!gpsLoading && localWarnings.length > 0 ? (
+                    <div className="bg-rose-50 text-rose-800 border border-rose-200 rounded p-3 space-y-1.5 animate-pulse">
+                      <div className="flex items-center gap-1.5">
+                        <AlertTriangle className="h-4 w-4 text-rose-600 flex-shrink-0" />
+                        <h4 className="font-bold text-[11px] uppercase tracking-wide">{t('gps_alert')}</h4>
+                      </div>
+                      <ul className="list-disc pl-4 text-xs font-bold space-y-1">
+                        {localWarnings.map(warn => (
+                          <li key={warn.id}>{warn.title} ({warn.type})</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : !gpsLoading && (
+                    <div className="bg-emerald-50 text-emerald-800 border border-emerald-250 p-2.5 rounded text-[10px] flex items-center gap-1.5">
+                      <CheckCircle className="h-4 w-4 text-emerald-600 flex-shrink-0" />
+                      <span className="font-bold">{t('gps_safe')}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </section>
+
             {/* Filters */}
             <section className="bg-white p-2.5 rounded-lg border border-slate-200 shadow-sm">
               <label className="text-[10px] font-bold text-slate-400 block mb-1.5 uppercase tracking-wide">
@@ -466,7 +599,7 @@ function App() {
                     onClick={() => setFilter(btn.id)}
                     className={`text-[10px] font-semibold py-1 rounded transition-colors text-center ${
                       filter === btn.id 
-                        ? 'bg-sky-650 bg-sky-600 text-white shadow-sm' 
+                        ? 'bg-sky-600 text-white shadow-sm' 
                         : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
                     }`}
                   >
@@ -490,7 +623,7 @@ function App() {
               ) : (
                 filteredAdvisories.map(item => {
                   const severityColor = 
-                    item.severity === 'high' ? 'bg-rose-550 bg-rose-100 text-rose-800 border-rose-200' :
+                    item.severity === 'high' ? 'bg-rose-100 text-rose-800 border-rose-200' :
                     item.severity === 'medium' ? 'bg-amber-100 text-amber-800 border-amber-200' :
                     'bg-emerald-100 text-emerald-800 border-emerald-200';
                   
@@ -519,7 +652,7 @@ function App() {
 
                       {item.latitude && item.longitude && (
                         <div className="text-[9px] text-slate-400 font-medium flex items-center gap-1">
-                          <MapPin className="h-2.5 w-2.5 text-sky-650 text-sky-600" />
+                          <MapPin className="h-2.5 w-2.5 text-sky-600" />
                           <span>Scope: {item.latitude.toFixed(2)}°, {item.longitude.toFixed(2)}° ({item.radius_km || 50}km Radius)</span>
                         </div>
                       )}
@@ -535,7 +668,7 @@ function App() {
                 <Phone className="h-4.5 w-4.5" />
                 <h2 className="font-bold text-xs">{t('subscribe_title')}</h2>
               </div>
-              <p className="text-[10px] text-slate-550 text-slate-500 leading-normal">{t('subscribe_desc')}</p>
+              <p className="text-[10px] text-slate-500 leading-normal">{t('subscribe_desc')}</p>
               
               <form onSubmit={handleSubscribe} className="space-y-2">
                 <input
@@ -544,7 +677,7 @@ function App() {
                   value={phoneNumber}
                   onChange={(e) => setPhoneNumber(e.target.value)}
                   disabled={submitting}
-                  className="w-full text-xs border border-slate-250 border-slate-350 rounded p-1.5 focus:ring-1 focus:ring-sky-500 focus:outline-none"
+                  className="w-full text-xs border border-slate-300 rounded p-1.5 focus:ring-1 focus:ring-sky-500 focus:outline-none"
                 />
                 
                 <div className="grid grid-cols-2 gap-2">
@@ -610,7 +743,7 @@ function App() {
 
                 <form onSubmit={handleLogin} className="space-y-3">
                   <div>
-                    <label className="text-[10px] font-bold text-slate-450 uppercase block mb-1">{t('login_username')}</label>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">{t('login_username')}</label>
                     <input
                       type="text"
                       placeholder="Username"
@@ -621,7 +754,7 @@ function App() {
                   </div>
 
                   <div>
-                    <label className="text-[10px] font-bold text-slate-450 uppercase block mb-1">{t('login_password')}</label>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">{t('login_password')}</label>
                     <input
                       type="password"
                       placeholder="Password"
@@ -675,7 +808,7 @@ function App() {
                       className={`py-1.5 rounded flex flex-col items-center gap-0.5 border text-center transition-colors ${
                         adminSubTab === tab.id 
                           ? 'bg-slate-700 text-white border-slate-700 shadow-sm'
-                          : 'bg-white text-slate-600 hover:bg-slate-50 border-slate-250'
+                          : 'bg-white text-slate-600 hover:bg-slate-50 border-slate-200'
                       }`}
                     >
                       {tab.icon}
@@ -700,7 +833,7 @@ function App() {
                           placeholder="e.g. Rough Sea Advisory"
                           value={advTitle}
                           onChange={(e) => setAdvTitle(e.target.value)}
-                          className="w-full border border-slate-350 border-slate-300 rounded p-1.5 focus:outline-none"
+                          className="w-full border border-slate-300 rounded p-1.5 focus:outline-none"
                         />
                       </div>
                       <div>
@@ -800,7 +933,7 @@ function App() {
 
                     <button
                       type="submit"
-                      className="w-full bg-sky-655 bg-sky-600 hover:bg-sky-700 text-white font-bold py-2 rounded text-xs transition-colors shadow-sm"
+                      className="w-full bg-sky-650 hover:bg-sky-700 text-white font-bold py-2 rounded text-xs transition-colors shadow-sm"
                     >
                       {t('submit_advisory_btn')}
                     </button>
@@ -816,14 +949,14 @@ function App() {
                     
                     {/* Add Region Form */}
                     <form onSubmit={handleCreateRegion} className="bg-white border border-slate-200 rounded-lg shadow-sm p-4 space-y-3">
-                      <h3 className="font-extrabold text-slate-800 text-xs border-b border-slate-105 pb-1.5 flex items-center gap-1">
+                      <h3 className="font-extrabold text-slate-800 text-xs border-b pb-1.5 flex items-center gap-1">
                         <MapPin className="h-4 w-4 text-emerald-600" />
                         {t('manage_regions')}
                       </h3>
 
                       <div className="grid grid-cols-3 gap-1.5 text-[10px]">
                         <div>
-                          <label className="font-bold text-slate-450 uppercase mb-0.5 block">{t('region_name_input')}</label>
+                          <label className="font-bold text-slate-400 uppercase mb-0.5 block">{t('region_name_input')}</label>
                           <input
                             type="text"
                             placeholder="e.g. chennai"
@@ -833,7 +966,7 @@ function App() {
                           />
                         </div>
                         <div>
-                          <label className="font-bold text-slate-450 uppercase mb-0.5 block">Lat</label>
+                          <label className="font-bold text-slate-400 uppercase mb-0.5 block">Lat</label>
                           <input
                             type="number"
                             step="0.0001"
@@ -844,7 +977,7 @@ function App() {
                           />
                         </div>
                         <div>
-                          <label className="font-bold text-slate-455 uppercase mb-0.5 block">Lng</label>
+                          <label className="font-bold text-slate-400 uppercase mb-0.5 block">Lng</label>
                           <input
                             type="number"
                             step="0.0001"
@@ -882,7 +1015,7 @@ function App() {
                             <div key={r.id} className="flex justify-between items-center py-2 text-xs">
                               <div>
                                 <span className="font-bold text-slate-700 capitalize">{r.name}</span>
-                                <span className="text-[10px] text-slate-450 block">Coordinates: {r.latitude}°, {r.longitude}°</span>
+                                <span className="text-[10px] text-slate-400 block">Coordinates: {r.latitude}°, {r.longitude}°</span>
                               </div>
                               <button 
                                 onClick={() => handleDeleteRegion(r.id)}
@@ -911,11 +1044,11 @@ function App() {
                     ) : (
                       <div className="space-y-3">
                         {advisories.map(adv => (
-                          <div key={adv.id} className="border border-slate-150 p-3 rounded-lg flex flex-col gap-2 relative bg-slate-50">
+                          <div key={adv.id} className="border border-slate-200 p-3 rounded-lg flex flex-col gap-2 relative bg-slate-50">
                             <div className="flex justify-between items-start gap-1">
                               <div>
                                 <h4 className="font-bold text-slate-800 text-xs">{adv.title}</h4>
-                                <span className="text-[9px] text-slate-450 font-bold uppercase">{adv.type}</span>
+                                <span className="text-[9px] text-slate-400 font-bold uppercase">{adv.type}</span>
                               </div>
                               <span className="text-[8px] font-bold px-1 py-0.2 rounded border bg-slate-200 text-slate-700">ID #{adv.id}</span>
                             </div>
@@ -948,19 +1081,19 @@ function App() {
                       </h3>
                       <button 
                         onClick={fetchBroadcastLogs}
-                        className="text-[10px] text-sky-655 font-bold hover:underline"
+                        className="text-[10px] text-sky-600 font-bold hover:underline"
                       >
                         Refresh Logs
                       </button>
                     </div>
 
                     {broadcastLogs.length === 0 ? (
-                      <p className="text-center py-6 text-slate-405 text-slate-400 text-xs">No broadcast history logs found.</p>
+                      <p className="text-center py-6 text-slate-400 text-xs">No broadcast history logs found.</p>
                     ) : (
                       <div className="max-h-80 overflow-y-auto border border-slate-100 rounded">
                         <table className="w-full text-left text-[10px] border-collapse">
                           <thead>
-                            <tr className="bg-slate-100 border-b border-slate-200 font-bold text-slate-650">
+                            <tr className="bg-slate-100 border-b border-slate-200 font-bold text-slate-500">
                               <th className="p-2">Adv</th>
                               <th className="p-2">{t('log_recipient')}</th>
                               <th className="p-2">{t('log_status')}</th>
@@ -983,7 +1116,7 @@ function App() {
                                       {log.status.toUpperCase()}
                                     </span>
                                   </td>
-                                  <td className="p-2 font-normal text-slate-450 text-[8px]">
+                                  <td className="p-2 font-normal text-slate-400 text-[8px]">
                                     {new Date(log.sent_at).toLocaleDateString(undefined, {month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit'})}
                                   </td>
                                 </tr>

@@ -49,5 +49,12 @@
   "broadcast_log_title": "Alert Broadcast Logs",
   "log_recipient": "Recipient",
   "log_status": "Status",
-  "log_time": "Date & Time"
+  "log_time": "Date & Time",
+  "gps_panel_title": "GPS Location Safety Radar",
+  "gps_btn_active": "Scan Location Coordinates",
+  "gps_btn_checking": "Locating Satellites...",
+  "gps_coords": "Your Position",
+  "gps_safe": "SAFE: No active warnings at your current coordinates.",
+  "gps_alert": "CRITICAL: You are inside the warning boundary of:",
+  "gps_not_supported": "Geolocation is not supported by your browser."
 }
