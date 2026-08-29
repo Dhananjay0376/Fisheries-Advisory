@@ -264,3 +264,20 @@ def get_broadcast_logs(
 ):
     """Retrieve audit history of alert broadcasts. Requires Admin authentication."""
     return db.query(BroadcastLog).order_by(BroadcastLog.sent_at.desc()).all()
+
+from fastapi import Query as QueryParam
+from app.services.ml import ml_service
+
+@router.get("/predict-weather", tags=["machine_learning"])
+def predict_weather(
+    lat: float = QueryParam(..., description="GPS Latitude"),
+    lon: float = QueryParam(..., description="GPS Longitude"),
+    timestamp: str = QueryParam(None, description="ISO timestamp (optional, defaults to now)")
+):
+    """
+    Predict weather conditions for a given GPS location and time using the TabPFN v2 model.
+    Returns weather class, safety level, confidence score, and fishing advice.
+    """
+    result = ml_service.predict_weather(lat, lon, timestamp)
+    return result
+
