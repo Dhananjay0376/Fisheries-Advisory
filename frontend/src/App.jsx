@@ -12,18 +12,16 @@ import {
   MapPin
 } from 'lucide-react'
 
-// Import localization bundles
-import en from './locales/en.json'
-import ta from './locales/ta.json'
-import hi from './locales/hi.json'
+import { useTranslation } from 'react-i18next'
+import MapView from './components/MapView'
 
-const locales = { en, ta, hi }
 const BACKEND_URL = 'http://127.0.0.1:8000'
 
 function App() {
   // 1. Language & Localization Setup
-  const [lang, setLang] = useState('en')
-  const t = (key) => locales[lang][key] || locales['en'][key] || key
+  const { t, i18n } = useTranslation()
+  const lang = i18n.language
+  const [activeTab, setActiveTab] = useState('advisories') // 'advisories' | 'map'
 
   // 2. Connectivity & Online/Offline Handling
   const [isOnline, setIsOnline] = useState(navigator.onLine)
@@ -166,12 +164,20 @@ function App() {
             <Globe className="h-4 w-4 mr-1 text-sky-200" />
             <select 
               value={lang} 
-              onChange={(e) => setLang(e.target.value)}
+              onChange={(e) => i18n.changeLanguage(e.target.value)}
               className="bg-transparent text-white focus:outline-none cursor-pointer font-medium"
             >
               <option value="en" className="text-slate-800">English</option>
-              <option value="ta" className="text-slate-800">தமிழ் (Tamil)</option>
               <option value="hi" className="text-slate-800">हिन्दी (Hindi)</option>
+              <option value="ta" className="text-slate-800">தமிழ் (Tamil)</option>
+              <option value="gu" className="text-slate-800">ગુજરાતી (Gujarati)</option>
+              <option value="mr" className="text-slate-800">मराठी (Marathi)</option>
+              <option value="kok" className="text-slate-800">कोंकणी (Konkani)</option>
+              <option value="kn" className="text-slate-800">ಕನ್ನಡ (Kannada)</option>
+              <option value="ml" className="text-slate-800">മലയാളം (Malayalam)</option>
+              <option value="te" className="text-slate-800">తెలుగు (Telugu)</option>
+              <option value="or" className="text-slate-800">ଓଡ଼ିଆ (Odia)</option>
+              <option value="bn" className="text-slate-800">বাংলা (Bengali)</option>
             </select>
           </div>
         </div>
@@ -196,9 +202,41 @@ function App() {
         </button>
       </div>
 
+      {/* Tab Navigation */}
+      <nav className="flex border-b border-slate-200 bg-white sticky top-[72px] z-40">
+        <button
+          onClick={() => setActiveTab('advisories')}
+          className={`flex-1 py-2.5 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors border-b-2 ${
+            activeTab === 'advisories'
+              ? 'border-sky-600 text-sky-700 bg-sky-50'
+              : 'border-transparent text-slate-500 hover:text-slate-700'
+          }`}
+        >
+          <AlertTriangle className="h-3.5 w-3.5" />
+          Advisories
+        </button>
+        <button
+          onClick={() => setActiveTab('map')}
+          className={`flex-1 py-2.5 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors border-b-2 ${
+            activeTab === 'map'
+              ? 'border-sky-600 text-sky-700 bg-sky-50'
+              : 'border-transparent text-slate-500 hover:text-slate-700'
+          }`}
+        >
+          <MapPin className="h-3.5 w-3.5" />
+          Map & Location
+        </button>
+      </nav>
+
       <main className="flex-1 p-4 space-y-6">
 
-        {/* 2. Advisory Filters */}
+        {/* MAP TAB */}
+        {activeTab === 'map' && (
+          <MapView isOnline={isOnline} />
+        )}
+
+        {/* ADVISORIES TAB */}
+        {activeTab === 'advisories' && (<>}
         <section className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm">
           <label className="text-xs font-semibold text-slate-500 block mb-2 uppercase tracking-wide">
             {t('filter_label')}
@@ -310,8 +348,16 @@ function App() {
                 className="text-xs border border-slate-300 rounded p-2 focus:ring-1 focus:ring-sky-500 bg-white"
               >
                 <option value="en">English</option>
-                <option value="ta">தமிழ் (Tamil)</option>
                 <option value="hi">हिन्दी (Hindi)</option>
+                <option value="ta">தமிழ் (Tamil)</option>
+                <option value="gu">ગુજરાતી (Gujarati)</option>
+                <option value="mr">मराठी (Marathi)</option>
+                <option value="kok">कोंकणी (Konkani)</option>
+                <option value="kn">ಕನ್ನಡ (Kannada)</option>
+                <option value="ml">മലയാളം (Malayalam)</option>
+                <option value="te">తెలుగు (Telugu)</option>
+                <option value="or">ଓଡ଼ିଆ (Odia)</option>
+                <option value="bn">বাংলা (Bengali)</option>
               </select>
               <div className="relative">
                 <input
@@ -348,6 +394,7 @@ function App() {
             </div>
           )}
         </section>
+        </>)}
       </main>
 
       {/* Footer */}
