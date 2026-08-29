@@ -29,7 +29,7 @@ import ta from './locales/ta.json'
 import hi from './locales/hi.json'
 
 const locales = { en, ta, hi }
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'https://fishries-advisory-backend.vercel.app'
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'
 
 function App() {
   // --- STATE SYSTEM ---
