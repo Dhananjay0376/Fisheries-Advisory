@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Fisheries Advisory App</string>
+    <string name="title_activity_main">Fisheries Advisory App</string>
+    <string name="package_name">com.fisheries.advisory</string>
+    <string name="custom_url_scheme">com.fisheries.advisory</string>
+</resources>
