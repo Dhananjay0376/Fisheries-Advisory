@@ -1,5 +1,8 @@
 #!/bin/sh
 
+# Redirect Gradle user home to E: drive to resolve C: drive disk space issues
+export GRADLE_USER_HOME="E:/.gradle"
+
 #
 # Copyright © 2015-2021 the original authors.
 #
