@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime
 
 # --- ADVISORY SCHEMAS ---
@@ -48,3 +48,51 @@ class SubscriberResponse(SubscriberBase):
 # --- BROADCAST ALERTS SCHEMAS ---
 class AlertBroadcastRequest(BaseModel):
     advisory_id: int
+
+# --- REGION SCHEMAS ---
+class RegionBase(BaseModel):
+    name: str = Field(..., description="Unique lowercase identifier for the region", examples=["chennai"])
+    latitude: float = Field(..., description="Latitude coordinate", examples=[13.0827])
+    longitude: float = Field(..., description="Longitude coordinate", examples=[80.2707])
+
+class RegionCreate(RegionBase):
+    pass
+
+class RegionResponse(RegionBase):
+    id: int
+
+    class Config:
+        from_attributes = True
+
+# --- USER & JWT SCHEMAS ---
+class UserCreate(BaseModel):
+    username: str = Field(..., max_length=50, examples=["admin"])
+    password: str = Field(..., min_length=6, examples=["supersecret"])
+
+class UserResponse(BaseModel):
+    id: int
+    username: str
+    is_active: bool
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+class TokenData(BaseModel):
+    username: Optional[str] = None
+
+# --- BROADCAST AUDIT LOG SCHEMAS ---
+class BroadcastLogResponse(BaseModel):
+    id: int
+    advisory_id: int
+    recipient_phone: str
+    status: str
+    error_message: Optional[str] = None
+    sent_at: datetime
+
+    class Config:
+        from_attributes = True
