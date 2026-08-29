@@ -16,8 +16,17 @@ from app.api import advisories_router
 from app.api.auth import router as auth_router
 from app.utils.security import hash_password
 
-# Auto-create SQLite database tables on startup
-Base.metadata.create_all(bind=engine)
+# Create database tables if they don't exist yet.
+# Wrapped in try/except because on Vercel serverless, if the DB is temporarily
+# unreachable on cold start, we must NOT crash the whole function — routes
+# that don't need DB (like /health) must still respond.
+try:
+    Base.metadata.create_all(bind=engine)
+except Exception as e:
+    import logging
+    logging.getLogger(__name__).warning(
+        f"Could not run create_all on startup (tables may already exist): {e}"
+    )
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -36,8 +45,14 @@ app.add_middleware(
 
 @app.on_event("startup")
 def startup_event():
-    from app.services.ml import ml_service
-    ml_service.load_model()
+    # ML model loading is optional - torch is not installed on Vercel (too large).
+    # The ML service falls back to mock predictions automatically when torch is missing.
+    try:
+        from app.services.ml import ml_service
+        ml_service.load_model()
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"ML model could not be loaded (running in mock mode): {e}")
 
 # Attach API endpoints
 app.include_router(advisories_router, prefix="/api")
@@ -50,6 +65,19 @@ def read_root():
         "app_name": settings.APP_NAME,
         "docs_url": "/docs"
     }
+
+@app.get("/health")
+def health_check():
+    """Health check endpoint — does not require DB."""
+    from sqlalchemy import text
+    db_status = "unknown"
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        db_status = "connected"
+    except Exception as e:
+        db_status = f"unreachable: {str(e)[:80]}"
+    return {"status": "ok", "database": db_status}
 
 @app.post("/api/seed-dummy-data")
 def seed_dummy_data(db: Session = Depends(get_db)):

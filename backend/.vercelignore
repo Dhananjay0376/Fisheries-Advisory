@@ -1,0 +1,16 @@
+# Exclude PyTorch model weights - too large for Vercel serverless (500 MB limit)
+# ML inference runs in mock mode on Vercel; run locally or on a dedicated GPU service
+app/ml/*.pt
+app/ml/*.pth
+app/ml/*.bin
+
+# Exclude test files from production deployment
+tests/
+
+# Exclude local development files
+.env
+*.pyc
+__pycache__/
+.pytest_cache/
+venv/
+.venv/
