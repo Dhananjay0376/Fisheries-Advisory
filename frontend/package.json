@@ -11,6 +11,9 @@
     "focus": "gsd 25 -b -n -c cyan"
   },
   "dependencies": {
+    "@capacitor/android": "^8.5.0",
+    "@capacitor/cli": "^8.5.0",
+    "@capacitor/core": "^8.5.0",
     "i18next": "^26.4.0",
     "leaflet": "^1.9.4",
     "leaflet.offline": "^3.2.1",

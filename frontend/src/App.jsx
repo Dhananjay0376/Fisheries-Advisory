@@ -513,7 +513,6 @@ function App() {
   }, [currentTab, token, adminSubTab])
 
   // --- FILTER & UTILS ---
-  const [filter, setFilter] = useState('all')
   const filteredAdvisories = advisories.filter(item => {
     if (filter === 'all') return true
     return item.type === filter
@@ -621,7 +620,6 @@ function App() {
                 <span className="text-[8px] bg-slate-100 text-slate-500 font-bold px-1.5 py-0.5 rounded-full">Offline Friendly</span>
               </div>
 
-<<<<<<< Updated upstream
               {!userCoords ? (
                 <div className="py-2 flex flex-col items-center gap-2">
                   <button
@@ -642,7 +640,7 @@ function App() {
                     )}
                   </button>
                   {gpsError && (
-                    <p className="text-[10px] text-rose-650 text-rose-600 font-medium text-center">{gpsError}</p>
+                    <p className="text-[10px] text-rose-600 font-medium text-center">{gpsError}</p>
                   )}
                 </div>
               ) : (
@@ -651,79 +649,6 @@ function App() {
                     <span className="text-slate-500 font-bold">{t('gps_coords')}:</span>
                     <span className="font-mono text-slate-800 font-bold">
                       {userCoords.latitude.toFixed(4)}° N, {userCoords.longitude.toFixed(4)}° E
-=======
-      <main className="flex-1 p-4 space-y-6">
-
-        {/* MAP TAB */}
-        {activeTab === 'map' && (
-          <MapView isOnline={isOnline} />
-        )}
-
-        {/* ADVISORIES TAB */}
-        {activeTab === 'advisories' && (<>
-        <section className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm">
-          <label className="text-xs font-semibold text-slate-500 block mb-2 uppercase tracking-wide">
-            {t('filter_label')}
-          </label>
-          <div className="grid grid-cols-4 gap-1">
-            {[
-              { id: 'all', label: t('filter_all') },
-              { id: 'weather', label: t('filter_weather') },
-              { id: 'fishing_zone', label: t('filter_zone') },
-              { id: 'safety', label: t('filter_safety') }
-            ].map(btn => (
-              <button
-                key={btn.id}
-                onClick={() => setFilter(btn.id)}
-                className={`text-[10px] sm:text-xs font-medium py-1.5 px-1 rounded transition-colors text-center ${
-                  filter === btn.id 
-                    ? 'bg-sky-600 text-white shadow-sm' 
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                }`}
-              >
-                {btn.label}
-              </button>
-            ))}
-          </div>
-        </section>
-
-        {/* 3. Advisories List */}
-        <section className="space-y-3">
-          {loading && advisories.length === 0 ? (
-            <div className="text-center py-8 text-slate-400 text-sm">
-              <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-2 text-sky-600" />
-              Loading advisories...
-            </div>
-          ) : filteredAdvisories.length === 0 ? (
-            <div className="text-center py-10 bg-white rounded-lg border border-dashed border-slate-300 text-slate-400 text-sm">
-              <Compass className="h-8 w-8 mx-auto mb-2 text-slate-300" />
-              {t('no_advisories')}
-            </div>
-          ) : (
-            filteredAdvisories.map(item => {
-              const severityColor = 
-                item.severity === 'high' ? 'bg-rose-100 text-rose-800 border-rose-200' :
-                item.severity === 'medium' ? 'bg-amber-100 text-amber-800 border-amber-200' :
-                'bg-emerald-100 text-emerald-800 border-emerald-200';
-              
-              return (
-                <article 
-                  key={item.id}
-                  className="bg-white rounded-lg border border-slate-200 shadow-sm p-4 relative overflow-hidden flex flex-col gap-2"
-                >
-                  <div className="flex justify-between items-start gap-2">
-                    <div className="flex items-center gap-2">
-                      <div className="p-1.5 rounded-lg bg-slate-100">
-                        {getIcon(item.type)}
-                      </div>
-                      <div>
-                        <h3 className="font-bold text-slate-800 text-sm">{item.title}</h3>
-                        <span className="text-[10px] text-slate-400 capitalize">{item.type}</span>
-                      </div>
-                    </div>
-                    <span className={`text-[9px] font-bold tracking-wider px-2 py-0.5 rounded-full border ${severityColor}`}>
-                      {t(`severity_${item.severity}`)}
->>>>>>> Stashed changes
                     </span>
                     <button 
                       onClick={fetchUserGPS}
@@ -824,7 +749,6 @@ function App() {
                         </span>
                       </div>
 
-<<<<<<< Updated upstream
                       <p className="text-xs text-slate-600 leading-normal font-normal bg-slate-50 p-2 rounded border border-slate-100">
                         {getCardContent(item)}
                       </p>
