@@ -10,6 +10,7 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background-color: #f8fafc;
+  transition: background-color 0.2s, color 0.2s;
 }
 
 /* Custom scrollbars for compact UI cards */
@@ -17,9 +18,12 @@ body {
   width: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: #f1f5f9;
+  background: transparent;
 }
 ::-webkit-scrollbar-thumb {
   background: #cbd5e1;
   border-radius: 3px;
+}
+.dark ::-webkit-scrollbar-thumb {
+  background: #71C7BD/40;
 }
